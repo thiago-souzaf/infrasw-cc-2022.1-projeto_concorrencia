@@ -11,7 +11,14 @@ import java.awt.*;
 import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 
+import java.io.FileNotFoundException;
+import java.io.IOException;
+
+import java.util.Objects;
+
 public class Player {
+
+    Queue queue = new Queue();
 
     /**
      * The MPEG audio bitstream.
@@ -30,15 +37,46 @@ public class Player {
 
     private int currentFrame = 0;
 
-    private final ActionListener buttonListenerPlayNow = e -> ;
-    private final ActionListener buttonListenerRemove = e -> ;
-    private final ActionListener buttonListenerAddSong = e -> ;
-    private final ActionListener buttonListenerPlayPause = e -> ;
-    private final ActionListener buttonListenerStop = e -> ;
-    private final ActionListener buttonListenerNext = e -> ;
-    private final ActionListener buttonListenerPrevious = e -> ;
-    private final ActionListener buttonListenerShuffle = e -> ;
-    private final ActionListener buttonListenerLoop = e -> ;
+    private final ActionListener buttonListenerPlayNow = e -> {
+        new Thread(() -> {
+            try {
+                String songID = window.getSelectedSong();
+                for (int i = 0; i < queue.getQueueLength(); i++) {
+                    if (Objects.equals(queue.getTable()[i][5], songID)) {
+                        this.device = FactoryRegistry.systemRegistry().createAudioDevice();
+                        this.device.open(this.decoder = new Decoder());
+                        this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
+                        break;
+                    }
+                }
+
+                for(boolean b = this.playNextFrame(); b; b = this.playNextFrame());
+
+            } catch (JavaLayerException | FileNotFoundException ex) {
+                throw new RuntimeException(ex);
+            }
+        }).start();
+    };
+    private final ActionListener buttonListenerRemove = e -> {};
+    private final ActionListener buttonListenerAddSong = e -> {
+        new Thread (() -> {
+            try {
+                Song currentSong = window.openFileChooser();
+                queue.addSongToQueue(currentSong);
+            } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException ex) {
+                throw new RuntimeException(ex);
+            }
+            window.setQueueList(queue.getTable());
+
+        }).start();
+    };
+
+    private final ActionListener buttonListenerPlayPause = e -> {};
+    private final ActionListener buttonListenerStop = e -> {};
+    private final ActionListener buttonListenerNext = e -> {};
+    private final ActionListener buttonListenerPrevious = e -> {};
+    private final ActionListener buttonListenerShuffle = e -> {};
+    private final ActionListener buttonListenerLoop = e -> {};
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
         public void mouseReleased(MouseEvent e) {
@@ -55,8 +93,8 @@ public class Player {
 
     public Player() {
         EventQueue.invokeLater(() -> window = new PlayerWindow(
-                TITULO_DA_JANELA,
-                LISTA_DE_REPRODUÇÃO,
+                "Reprodutor MP3",
+                queue.getTable(),
                 buttonListenerPlayNow,
                 buttonListenerRemove,
                 buttonListenerAddSong,
@@ -114,5 +152,6 @@ public class Player {
             while (framesToSkip-- > 0 && condition) condition = skipNextFrame();
         }
     }
+
     //</editor-fold>
 }
