@@ -14,8 +14,6 @@ import java.awt.event.MouseEvent;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 
-import java.util.Objects;
-
 public class Player {
 
     Queue queue = new Queue();
@@ -42,7 +40,7 @@ public class Player {
             try {
                 String songID = window.getSelectedSong();
                 for (int i = 0; i < queue.getQueueLength(); i++) {
-                    if (Objects.equals(queue.getTable()[i][5], songID)) {
+                    if (queue.getTable()[i][5].equals(songID)) {
                         this.device = FactoryRegistry.systemRegistry().createAudioDevice();
                         this.device.open(this.decoder = new Decoder());
                         this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
@@ -57,7 +55,18 @@ public class Player {
             }
         }).start();
     };
-    private final ActionListener buttonListenerRemove = e -> {};
+    private final ActionListener buttonListenerRemove = e -> {
+        new Thread(() -> {
+            String songID = window.getSelectedSong();
+            for (int i =0; i < queue.getQueueLength(); i++){
+                if (queue.getTable()[i][5].equals(songID)) {
+                    queue.removeSongFromQueue(i);
+                    break;
+                }
+            }
+            window.setQueueList(queue.getTable());
+        }).start();
+    };
     private final ActionListener buttonListenerAddSong = e -> {
         new Thread (() -> {
             try {
