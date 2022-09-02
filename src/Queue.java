@@ -67,8 +67,8 @@ public class Queue {
             this.duracaoMusicas[i] = this.duracaoMusicas[i+1];
         }
         this.songs[queueLength] = null;
-        this.table[queueLength] = null;
-        this.duracaoMusicas[queueLength] = null;
+        this.table[queueLength] = new String[6];
+        this.duracaoMusicas[queueLength] = new float[2];
     }
     public Song getSong(int index){
         return songs[index];

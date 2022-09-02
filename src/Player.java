@@ -94,7 +94,9 @@ public class Player {
             try {
                 semaphore1.acquire();
                 Song currentSong = window.openFileChooser();
-                queue.addSongToQueue(currentSong);
+                if (currentSong != null){
+                    queue.addSongToQueue(currentSong);
+                }
                 semaphore1.release();
             } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException |
                      InterruptedException ex) {
