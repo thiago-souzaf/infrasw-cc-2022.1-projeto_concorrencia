@@ -35,10 +35,13 @@ public class Player {
     Semaphore semaphore1;
     /** Semáforo binário usado para controlar o bitstream e device */
     Semaphore semaphore2;
+    /** Semáforo binário usado para dar play e pause nas músicas*/
+    Semaphore semaphore3;
     boolean free1; boolean free2;
     int alterna;
+    int button;
+    boolean isButtonAbled;
     private final ActionListener buttonListenerPlayNow = e -> {
-
         Thread t1 = new Thread(() -> {
             try {
                 free1 = false;
@@ -64,6 +67,9 @@ public class Player {
             t2.start();
             System.out.println("t2 iniciada");
         }
+        if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
+            semaphore3.release();
+        };
     };
     private final ActionListener buttonListenerRemove = e -> {
         new Thread(() -> {
@@ -97,8 +103,21 @@ public class Player {
             window.setQueueList(queue.getTable());
         }).start();
     };
-
-    private final ActionListener buttonListenerPlayPause = e -> {};
+    private final ActionListener buttonListenerPlayPause = e -> {
+        if (button == window.BUTTON_ICON_PLAY){
+            System.out.println("Resumir a música");
+            semaphore3.release();
+            ablePause();
+        } else if (button == window.BUTTON_ICON_PAUSE) {
+            System.out.println("Pausar música");
+            try {
+                semaphore3.acquire();
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+            ablePlay();
+        }
+    };
     private final ActionListener buttonListenerStop = e -> {};
     private final ActionListener buttonListenerNext = e -> {};
     private final ActionListener buttonListenerPrevious = e -> {};
@@ -135,10 +154,13 @@ public class Player {
         );
         semaphore1 = new Semaphore(1);
         semaphore2 = new Semaphore(1);
+        semaphore3 = new Semaphore(1);
         queue = new Queue();
         alterna = 0;
         free1 = true;
         free2 = true;
+        button = 0;
+        isButtonAbled = false;
     }
 
     //<editor-fold desc="Essential">
@@ -193,7 +215,6 @@ public class Player {
         for (int i = 0; i < queue.getQueueLength(); i++) {
             if (queue.getTable()[i][5].equals(songID)) {
                 String[] info = queue.getTable()[i];
-                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
                 semaphore2.acquire();
                 currentFrame = 0;
                 alterna = alt;
@@ -205,7 +226,6 @@ public class Player {
                 } catch (NullPointerException exc) {
                     System.out.println("nenhum device existente");
                 }
-                Thread.currentThread().setPriority(Thread.NORM_PRIORITY);
                 this.device = FactoryRegistry.systemRegistry().createAudioDevice();
                 this.device.open(this.decoder = new Decoder());
                 this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
@@ -216,19 +236,44 @@ public class Player {
                 break;
             }
         }
+        ablePause();
         boolean b = this.playNextFrame();
         while (b){
             semaphore2.acquire();
+            semaphore3.acquire();
             if(alterna == alt) {
                 b = this.playNextFrame();
                 semaphore2.release();
+                semaphore3.release();
                 currentFrame++;
                 window.setTime(currentFrame*msPerFrame, duracaoMus);
             } else{
                 semaphore2.release();
+                semaphore3.release();
                 break;
             }
         }
+    }
+
+    // Controladores do botao play/pause
+    private void disablePlayPause(){
+        window.setEnabledPlayPauseButton(false);
+        window.setPlayPauseButtonIcon(window.BUTTON_ICON_PLAY);
+        button = window.BUTTON_ICON_PLAY;
+        isButtonAbled = false;
+    }
+    private void ablePlay(){
+        window.setEnabledPlayPauseButton(true);
+        window.setPlayPauseButtonIcon(window.BUTTON_ICON_PLAY);
+        button = window.BUTTON_ICON_PLAY;
+        isButtonAbled = true;
+
+    }
+    private void ablePause(){
+        window.setEnabledPlayPauseButton(true);
+        window.setPlayPauseButtonIcon(window.BUTTON_ICON_PAUSE);
+        button = window.BUTTON_ICON_PAUSE;
+        isButtonAbled = true;
     }
 
     //</editor-fold>
