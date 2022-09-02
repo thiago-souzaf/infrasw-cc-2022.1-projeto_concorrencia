@@ -13,11 +13,10 @@ import java.awt.event.MouseEvent;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.concurrent.Semaphore;
 
 public class Player {
-
-    Queue queue = new Queue();
-
+    Queue queue;
     /**
      * The MPEG audio bitstream.
      */
@@ -30,39 +29,56 @@ public class Player {
      * The AudioDevice where audio samples are written to.
      */
     private AudioDevice device;
-
     private PlayerWindow window;
-
     private int currentFrame = 0;
-
+    /** Semáforo binário usado para adicionar e remover músicas */
+    Semaphore semaphore1;
+    /** Semáforo binário usado para controlar o bitstream e device */
+    Semaphore semaphore2;
+    boolean free1; boolean free2;
+    int alterna;
     private final ActionListener buttonListenerPlayNow = e -> {
-        new Thread(() -> {
+
+        Thread t1 = new Thread(() -> {
             try {
-                String songID = window.getSelectedSong();
-                for (int i = 0; i < queue.getQueueLength(); i++) {
-                    if (queue.getTable()[i][5].equals(songID)) {
-                        this.device = FactoryRegistry.systemRegistry().createAudioDevice();
-                        this.device.open(this.decoder = new Decoder());
-                        this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
-                        break;
-                    }
-                }
-
-                for(boolean b = this.playNextFrame(); b; b = this.playNextFrame());
-
-            } catch (JavaLayerException | FileNotFoundException ex) {
+                free1 = false;
+                tocarMusicaSelecionada(1);
+                free1 = true;
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
-        }).start();
+        });
+        Thread t2 = new Thread(() -> {
+            try {
+                free2 = false;
+                tocarMusicaSelecionada(0);
+                free2 = true;
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        if (alterna == 0 && free1){
+            t1.start();
+            System.out.println("t1 iniciada");
+        } else if (alterna == 1 && free2){
+            t2.start();
+            System.out.println("t2 iniciada");
+        }
     };
     private final ActionListener buttonListenerRemove = e -> {
         new Thread(() -> {
-            String songID = window.getSelectedSong();
-            for (int i =0; i < queue.getQueueLength(); i++){
-                if (queue.getTable()[i][5].equals(songID)) {
-                    queue.removeSongFromQueue(i);
-                    break;
+            try {
+                semaphore1.acquire();
+                String songID = window.getSelectedSong();
+                for (int i =0; i < queue.getQueueLength(); i++){
+                    if (queue.getTable()[i][5].equals(songID)) {
+                        queue.removeSongFromQueue(i);
+                        break;
+                    }
                 }
+                semaphore1.release();
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
             }
             window.setQueueList(queue.getTable());
         }).start();
@@ -70,13 +86,15 @@ public class Player {
     private final ActionListener buttonListenerAddSong = e -> {
         new Thread (() -> {
             try {
+                semaphore1.acquire();
                 Song currentSong = window.openFileChooser();
                 queue.addSongToQueue(currentSong);
-            } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException ex) {
+                semaphore1.release();
+            } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException |
+                     InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
             window.setQueueList(queue.getTable());
-
         }).start();
     };
 
@@ -115,6 +133,12 @@ public class Player {
                 buttonListenerLoop,
                 scrubberMouseInputAdapter)
         );
+        semaphore1 = new Semaphore(1);
+        semaphore2 = new Semaphore(1);
+        queue = new Queue();
+        alterna = 0;
+        free1 = true;
+        free2 = true;
     }
 
     //<editor-fold desc="Essential">
@@ -159,6 +183,51 @@ public class Player {
             int framesToSkip = newFrame - currentFrame;
             boolean condition = true;
             while (framesToSkip-- > 0 && condition) condition = skipNextFrame();
+        }
+    }
+
+    private void tocarMusicaSelecionada(int alt) throws InterruptedException, JavaLayerException, FileNotFoundException{
+        int duracaoMus = 0;
+        int msPerFrame= 0;
+        String songID = window.getSelectedSong();
+        for (int i = 0; i < queue.getQueueLength(); i++) {
+            if (queue.getTable()[i][5].equals(songID)) {
+                String[] info = queue.getTable()[i];
+                Thread.currentThread().setPriority(Thread.MAX_PRIORITY);
+                semaphore2.acquire();
+                currentFrame = 0;
+                alterna = alt;
+                try {
+                    if (this.device.isOpen()) {
+                        this.device.close();
+                        this.bitstream.close();
+                    }
+                } catch (NullPointerException exc) {
+                    System.out.println("nenhum device existente");
+                }
+                Thread.currentThread().setPriority(Thread.NORM_PRIORITY);
+                this.device = FactoryRegistry.systemRegistry().createAudioDevice();
+                this.device.open(this.decoder = new Decoder());
+                this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
+                semaphore2.release();
+                window.setPlayingSongInfo(info[0], info[1], info[2]);
+                duracaoMus = queue.getDuracaoMusica(i);
+                msPerFrame = queue.getMsPerFrame(i);
+                break;
+            }
+        }
+        boolean b = this.playNextFrame();
+        while (b){
+            semaphore2.acquire();
+            if(alterna == alt) {
+                b = this.playNextFrame();
+                semaphore2.release();
+                currentFrame++;
+                window.setTime(currentFrame*msPerFrame, duracaoMus);
+            } else{
+                semaphore2.release();
+                break;
+            }
         }
     }
 
