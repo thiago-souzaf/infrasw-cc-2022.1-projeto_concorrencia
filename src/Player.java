@@ -40,6 +40,7 @@ public class Player {
     boolean free1; boolean free2;
     int alterna;
     int button;
+    int stop = 0;
     boolean isButtonAbled;
     private final ActionListener buttonListenerPlayNow = e -> {
         Thread t1 = new Thread(() -> {
@@ -120,7 +121,9 @@ public class Player {
             ablePlay();
         }
     };
-    private final ActionListener buttonListenerStop = e -> {};
+    private final ActionListener buttonListenerStop = e -> {
+        stop = 1;
+    };
     private final ActionListener buttonListenerNext = e -> {};
     private final ActionListener buttonListenerPrevious = e -> {};
     private final ActionListener buttonListenerShuffle = e -> {};
@@ -238,6 +241,7 @@ public class Player {
                 break;
             }
         }
+        window.setEnabledStopButton(true);
         ablePause();
         boolean b = this.playNextFrame();
         while (b){
@@ -254,7 +258,14 @@ public class Player {
                 semaphore3.release();
                 break;
             }
+
+            if (stop == 1){
+                stop = 0;
+                break;
+            }
         }
+
+        window.resetMiniPlayer();
     }
 
     // Controladores do botao play/pause
