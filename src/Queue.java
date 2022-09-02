@@ -10,6 +10,13 @@ public class Queue {
     }
     /** Capacidade máxima da queue */
     private int queueCap;
+    private float[][] duracaoMusicas;
+    public int getDuracaoMusica(int index){
+        return (int) duracaoMusicas[index][0];
+    }
+    public int getMsPerFrame( int index){
+        return (int) duracaoMusicas[index][1];
+    }
     private String[][] table;
     public String[][] getTable() {
         return table;
@@ -19,6 +26,7 @@ public class Queue {
         this.queueCap = 1;
         this.table = new String[1][6];
         this.songs = new Song[1];
+        this.duracaoMusicas = new float[1][2];
     }
     
     public void addSongToQueue(Song song){
@@ -30,43 +38,37 @@ public class Queue {
             this.table[queueLength][3] = song.getYear();
             this.table[queueLength][4] = song.getStrLength();
             this.table[queueLength][5] = song.getUuid();
-            
+            this.duracaoMusicas[queueLength][0] = song.getMsLength();
+            this.duracaoMusicas[queueLength][1] = song.getMsPerFrame();
+
             this.queueLength++;
         } else{
             Song[] newSongs = new Song[queueCap*2];
             String[][] newTable = new String[queueCap*2][6];
+            float[][] newDuracao = new float[queueCap*2][2];
 
             for (int i = 0; i < queueCap; i++){
                 newSongs[i] = songs[i];
-                for (int j = 0; j < 6; j++){
-                    newTable[i][j] = table[i][j];
-                }
+                newDuracao[i] = duracaoMusicas[i];
+                newTable[i] = table[i];
             }
             queueCap *= 2;
             this.songs = newSongs;
             this.table = newTable;
+            this.duracaoMusicas = newDuracao;
             addSongToQueue(song);
         }
     }
-
     public void removeSongFromQueue(int index){
         queueLength--;
         for(int i = index; i < (this.queueLength); i++){
             this.songs[i] = this.songs[i+1];
-            this.table[i][0] = this.table[i+1][0];
-            this.table[i][1] = this.table[i+1][1];
-            this.table[i][2] = this.table[i+1][2];
-            this.table[i][3] = this.table[i+1][3];
-            this.table[i][4] = this.table[i+1][4];
-            this.table[i][5] = this.table[i+1][5];
+            this.table[i] = this.table[i+1];
+            this.duracaoMusicas[i] = this.duracaoMusicas[i+1];
         }
         this.songs[queueLength] = null;
-        this.table[queueLength][0] = null;
-        this.table[queueLength][1] = null;
-        this.table[queueLength][2] = null;
-        this.table[queueLength][3] = null;
-        this.table[queueLength][4] = null;
-        this.table[queueLength][5] = null;
+        this.table[queueLength] = null;
+        this.duracaoMusicas[queueLength] = null;
     }
     public Song getSong(int index){
         return songs[index];
