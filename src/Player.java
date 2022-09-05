@@ -70,7 +70,7 @@ public class Player {
         }
         if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
             semaphore3.release();
-        };
+        }
     };
     private final ActionListener buttonListenerRemove = e -> {
         new Thread(() -> {
@@ -123,6 +123,9 @@ public class Player {
     };
     private final ActionListener buttonListenerStop = e -> {
         stop = 1;
+        if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
+            semaphore3.release();
+        }
     };
     private final ActionListener buttonListenerNext = e -> {};
     private final ActionListener buttonListenerPrevious = e -> {};
@@ -261,20 +264,19 @@ public class Player {
 
             if (stop == 1){
                 stop = 0;
+                window.resetMiniPlayer();
+                button = window.BUTTON_ICON_PLAY;
+                isButtonAbled = false;
                 break;
             }
         }
+        if (alterna == alt){
+            window.resetMiniPlayer();
+        }
 
-        window.resetMiniPlayer();
     }
 
     // Controladores do botao play/pause
-    private void disablePlayPause(){
-        window.setEnabledPlayPauseButton(false);
-        window.setPlayPauseButtonIcon(window.BUTTON_ICON_PLAY);
-        button = window.BUTTON_ICON_PLAY;
-        isButtonAbled = false;
-    }
     private void ablePlay(){
         window.setEnabledPlayPauseButton(true);
         window.setPlayPauseButtonIcon(window.BUTTON_ICON_PLAY);
