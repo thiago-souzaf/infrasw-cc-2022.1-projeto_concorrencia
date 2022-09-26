@@ -1,26 +1,18 @@
 import support.Song;
 
 public class Queue {
+    //<editor-fold desc="Atributos">
     /** Array contendo os objetos do tipo Song */
     private Song[] songs;
     /** Quantos songs tem atualmente na queue */
     private int queueLength;
-    public int getQueueLength() {
-        return queueLength;
-    }
     /** Capacidade máxima da queue */
     private int queueCap;
     private float[][] duracaoMusicas;
-    public int getDuracaoMusica(int index){
-        return (int) duracaoMusicas[index][0];
-    }
-    public int getMsPerFrame( int index){
-        return (int) duracaoMusicas[index][1];
-    }
     private String[][] table;
-    public String[][] getTable() {
-        return table;
-    }
+    private int songPlayingIndex;
+    //</editor-fold>
+
     public Queue() {
         this.queueLength = 0;
         this.queueCap = 1;
@@ -28,7 +20,6 @@ public class Queue {
         this.songs = new Song[1];
         this.duracaoMusicas = new float[1][2];
     }
-    
     public void addSongToQueue(Song song){
         if(queueLength < queueCap){
             this.songs[queueLength] = song;
@@ -70,7 +61,32 @@ public class Queue {
         this.table[queueLength] = new String[6];
         this.duracaoMusicas[queueLength] = new float[2];
     }
+
+    public String getSongID(int index){
+        return table[index][5];
+    }
+
+    //<editor-fold desc="Getters and Setters">
+    public int getDuracaoMusica(int index){
+        return (int) duracaoMusicas[index][0];
+    }
+    public int getMsPerFrame( int index){
+        return (int) duracaoMusicas[index][1];
+    }
+    public String[][] getTable() {
+        return table;
+    }
+    public int getQueueLength() {
+        return queueLength;
+    }
     public Song getSong(int index){
         return songs[index];
     }
+    public int getSongPlayingIndex() {
+        return songPlayingIndex;
+    }
+    public void setSongPlayingIndex(int songPlayingIndex) {
+        this.songPlayingIndex = songPlayingIndex;
+    }
+    //</editor-fold>
 }

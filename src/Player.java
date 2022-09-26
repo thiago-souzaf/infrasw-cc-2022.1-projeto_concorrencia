@@ -43,34 +43,8 @@ public class Player {
     int stop = 0;
     boolean isButtonAbled;
     private final ActionListener buttonListenerPlayNow = e -> {
-        Thread t1 = new Thread(() -> {
-            try {
-                free1 = false;
-                tocarMusicaSelecionada(1);
-                free1 = true;
-            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
-                throw new RuntimeException(ex);
-            }
-        });
-        Thread t2 = new Thread(() -> {
-            try {
-                free2 = false;
-                tocarMusicaSelecionada(0);
-                free2 = true;
-            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
-                throw new RuntimeException(ex);
-            }
-        });
-        if (alterna == 0 && free1){
-            t1.start();
-            System.out.println("t1 iniciada");
-        } else if (alterna == 1 && free2){
-            t2.start();
-            System.out.println("t2 iniciada");
-        }
-        if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
-            semaphore3.release();
-        }
+        String songID = window.getSelectedSong();
+        alternarMusica(songID);
     };
     private final ActionListener buttonListenerRemove = e -> {
         new Thread(() -> {
@@ -127,8 +101,14 @@ public class Player {
             semaphore3.release();
         }
     };
-    private final ActionListener buttonListenerNext = e -> {};
-    private final ActionListener buttonListenerPrevious = e -> {};
+    private final ActionListener buttonListenerNext = e -> {
+        String songID = queue.getSongID(queue.getSongPlayingIndex()+1);
+        alternarMusica(songID);
+    };
+    private final ActionListener buttonListenerPrevious = e -> {
+        String songID = queue.getSongID(queue.getSongPlayingIndex()-1);
+        alternarMusica(songID);
+    };
     private final ActionListener buttonListenerShuffle = e -> {};
     private final ActionListener buttonListenerLoop = e -> {};
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
@@ -216,12 +196,76 @@ public class Player {
         }
     }
 
+    private void tocarMusica(int alt, String songID) throws InterruptedException, JavaLayerException, FileNotFoundException{
+        int duracaoMus = 0;
+        int msPerFrame= 0;
+        for (int i = 0; i < queue.getQueueLength(); i++) {
+            if (queue.getTable()[i][5].equals(songID)) {
+                queue.setSongPlayingIndex(i);
+                ablePreviousNext(i);
+                String[] info = queue.getTable()[i];
+                semaphore2.acquire();
+                currentFrame = 0;
+                alterna = alt;
+                try {
+                    if (this.device.isOpen()) {
+                        this.device.close();
+                        this.bitstream.close();
+                    }
+                } catch (NullPointerException exc) {
+                    System.out.println("nenhum device existente");
+                }
+                this.device = FactoryRegistry.systemRegistry().createAudioDevice();
+                this.device.open(this.decoder = new Decoder());
+                this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
+                semaphore2.release();
+                window.setPlayingSongInfo(info[0], info[1], info[2]);
+                duracaoMus = queue.getDuracaoMusica(i);
+                msPerFrame = queue.getMsPerFrame(i);
+                break;
+            }
+        }
+        window.setEnabledStopButton(true);
+        ablePause();
+        boolean b = this.playNextFrame();
+        while (b){
+            semaphore2.acquire();
+            semaphore3.acquire();
+            if(alterna == alt) {
+                b = this.playNextFrame();
+                semaphore2.release();
+                semaphore3.release();
+                currentFrame++;
+                window.setTime(currentFrame*msPerFrame, duracaoMus);
+            } else{
+                semaphore2.release();
+                semaphore3.release();
+                break;
+            }
+
+            if (stop == 1){
+                stop = 0;
+                window.resetMiniPlayer();
+                button = window.BUTTON_ICON_PLAY;
+                isButtonAbled = false;
+                break;
+            }
+        }
+        if (alterna == alt){ // Quando a música sendo reproduzida acaba, entra nesse if
+            if (existeProximaMusica(queue.getSongPlayingIndex())){
+                alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
+            }else{
+                window.resetMiniPlayer(); // Não tem próxima música -> reseta o miniplayer
+            }
+        }
+    }
     private void tocarMusicaSelecionada(int alt) throws InterruptedException, JavaLayerException, FileNotFoundException{
         int duracaoMus = 0;
         int msPerFrame= 0;
         String songID = window.getSelectedSong();
         for (int i = 0; i < queue.getQueueLength(); i++) {
             if (queue.getTable()[i][5].equals(songID)) {
+                ablePreviousNext(i);
                 String[] info = queue.getTable()[i];
                 semaphore2.acquire();
                 currentFrame = 0;
@@ -273,10 +317,9 @@ public class Player {
         if (alterna == alt){
             window.resetMiniPlayer();
         }
-
     }
 
-    // Controladores do botao play/pause
+    // Controladores dos botões
     private void ablePlay(){
         window.setEnabledPlayPauseButton(true);
         window.setPlayPauseButtonIcon(window.BUTTON_ICON_PLAY);
@@ -289,6 +332,59 @@ public class Player {
         window.setPlayPauseButtonIcon(window.BUTTON_ICON_PAUSE);
         button = window.BUTTON_ICON_PAUSE;
         isButtonAbled = true;
+    }
+    private void ablePreviousNext(int songIndex){
+        try{
+            window.setEnabledPreviousButton(queue.getTable()[songIndex - 1][0] != null);
+        }
+        catch (ArrayIndexOutOfBoundsException e){
+            window.setEnabledPreviousButton(false);
+        }
+        try{
+            window.setEnabledNextButton(queue.getTable()[songIndex + 1][0] != null);
+        }
+        catch (ArrayIndexOutOfBoundsException e) {
+            window.setEnabledNextButton(false);
+        }
+    }
+
+    private boolean existeProximaMusica(int songIndex){
+        try{
+            return queue.getTable()[songIndex + 1][0] != null;
+        }
+        catch (ArrayIndexOutOfBoundsException e){
+            return false;
+        }
+    }
+    private void alternarMusica(String songID){
+        Thread t1 = new Thread(() -> {
+            try {
+                free1 = false;
+                tocarMusica(1, songID);
+                free1 = true;
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        Thread t2 = new Thread(() -> {
+            try {
+                free2 = false;
+                tocarMusica(0, songID);
+                free2 = true;
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        if (alterna == 0 && free1){
+            t1.start();
+            System.out.println("t1 iniciada");
+        } else if (alterna == 1 && free2){
+            t2.start();
+            System.out.println("t2 iniciada");
+        }
+        if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
+            semaphore3.release();
+        }
     }
 
     //</editor-fold>
