@@ -41,50 +41,48 @@ public class Player {
     int alterna;
     int button;
     int stop = 0;
-    boolean isButtonAbled;
+    boolean isButtonAble;
     private final ActionListener buttonListenerPlayNow = e -> {
         String songID = window.getSelectedSong();
         alternarMusica(songID);
     };
-    private final ActionListener buttonListenerRemove = e -> {
-        new Thread(() -> {
-            try {
-                semaphore1.acquire();
-                String songID = window.getSelectedSong();
-                for (int i =0; i < queue.getQueueLength(); i++){
-                    if (queue.getTable()[i][5].equals(songID)) {
-                        queue.removeSongFromQueue(i);
-                        break;
-                    }
+    private final ActionListener buttonListenerRemove = e -> new Thread(() -> {
+        try {
+            semaphore1.acquire();
+            String songID = window.getSelectedSong();
+            for (int i =0; i < queue.getQueueLength(); i++){
+                if (queue.getTable()[i][5].equals(songID)) {
+                    queue.removeSongFromQueue(i);
+                    enablePreviousNext();
+                    break;
                 }
-                semaphore1.release();
-            } catch (InterruptedException ex) {
-                throw new RuntimeException(ex);
             }
-            window.setQueueList(queue.getTable());
-        }).start();
-    };
-    private final ActionListener buttonListenerAddSong = e -> {
-        new Thread (() -> {
-            try {
-                semaphore1.acquire();
-                Song currentSong = window.openFileChooser();
-                if (currentSong != null){
-                    queue.addSongToQueue(currentSong);
-                }
-                semaphore1.release();
-            } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException |
-                     InterruptedException ex) {
-                throw new RuntimeException(ex);
+            semaphore1.release();
+        } catch (InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
+        window.setQueueList(queue.getTable());
+    }).start();
+    private final ActionListener buttonListenerAddSong = e -> new Thread (() -> {
+        try {
+            semaphore1.acquire();
+            Song currentSong = window.openFileChooser();
+            if (currentSong != null){
+                queue.addSongToQueue(currentSong);
             }
-            window.setQueueList(queue.getTable());
-        }).start();
-    };
+            semaphore1.release();
+        } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException |
+                 InterruptedException ex) {
+            throw new RuntimeException(ex);
+        }
+        enablePreviousNext();
+        window.setQueueList(queue.getTable());
+    }).start();
     private final ActionListener buttonListenerPlayPause = e -> {
         if (button == window.BUTTON_ICON_PLAY){
             System.out.println("Resumir a música");
             semaphore3.release();
-            ablePause();
+            enablePause();
         } else if (button == window.BUTTON_ICON_PAUSE) {
             System.out.println("Pausar música");
             try {
@@ -92,12 +90,12 @@ public class Player {
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
-            ablePlay();
+            enablePlay();
         }
     };
     private final ActionListener buttonListenerStop = e -> {
         stop = 1;
-        if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
+        if (button == window.BUTTON_ICON_PLAY && isButtonAble){
             semaphore3.release();
         }
     };
@@ -148,7 +146,7 @@ public class Player {
         free1 = true;
         free2 = true;
         button = 0;
-        isButtonAbled = false;
+        isButtonAble = false;
     }
 
     //<editor-fold desc="Essential">
@@ -202,7 +200,7 @@ public class Player {
         for (int i = 0; i < queue.getQueueLength(); i++) {
             if (queue.getTable()[i][5].equals(songID)) {
                 queue.setSongPlayingIndex(i);
-                ablePreviousNext(i);
+                enablePreviousNext();
                 String[] info = queue.getTable()[i];
                 semaphore2.acquire();
                 currentFrame = 0;
@@ -226,7 +224,7 @@ public class Player {
             }
         }
         window.setEnabledStopButton(true);
-        ablePause();
+        enablePause();
         boolean b = this.playNextFrame();
         while (b){
             semaphore2.acquire();
@@ -247,12 +245,12 @@ public class Player {
                 stop = 0;
                 window.resetMiniPlayer();
                 button = window.BUTTON_ICON_PLAY;
-                isButtonAbled = false;
+                isButtonAble = false;
                 break;
             }
         }
-        if (alterna == alt){ // Quando a música sendo reproduzida acaba, entra nesse if
-            if (existeProximaMusica(queue.getSongPlayingIndex())){
+        if (alterna == alt && isButtonAble){ // Quando a música sendo reproduzida acaba, entra nesse if
+            if (queue.existeProximaMusica()){
                 alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
             }else{
                 window.resetMiniPlayer(); // Não tem próxima música -> reseta o miniplayer
@@ -265,7 +263,7 @@ public class Player {
         String songID = window.getSelectedSong();
         for (int i = 0; i < queue.getQueueLength(); i++) {
             if (queue.getTable()[i][5].equals(songID)) {
-                ablePreviousNext(i);
+                enablePreviousNext();
                 String[] info = queue.getTable()[i];
                 semaphore2.acquire();
                 currentFrame = 0;
@@ -289,7 +287,7 @@ public class Player {
             }
         }
         window.setEnabledStopButton(true);
-        ablePause();
+        enablePause();
         boolean b = this.playNextFrame();
         while (b){
             semaphore2.acquire();
@@ -310,7 +308,7 @@ public class Player {
                 stop = 0;
                 window.resetMiniPlayer();
                 button = window.BUTTON_ICON_PLAY;
-                isButtonAbled = false;
+                isButtonAble = false;
                 break;
             }
         }
@@ -320,41 +318,22 @@ public class Player {
     }
 
     // Controladores dos botões
-    private void ablePlay(){
+    private void enablePlay(){
         window.setEnabledPlayPauseButton(true);
         window.setPlayPauseButtonIcon(window.BUTTON_ICON_PLAY);
         button = window.BUTTON_ICON_PLAY;
-        isButtonAbled = true;
+        isButtonAble = true;
 
     }
-    private void ablePause(){
+    private void enablePause(){
         window.setEnabledPlayPauseButton(true);
         window.setPlayPauseButtonIcon(window.BUTTON_ICON_PAUSE);
         button = window.BUTTON_ICON_PAUSE;
-        isButtonAbled = true;
+        isButtonAble = true;
     }
-    private void ablePreviousNext(int songIndex){
-        try{
-            window.setEnabledPreviousButton(queue.getTable()[songIndex - 1][0] != null);
-        }
-        catch (ArrayIndexOutOfBoundsException e){
-            window.setEnabledPreviousButton(false);
-        }
-        try{
-            window.setEnabledNextButton(queue.getTable()[songIndex + 1][0] != null);
-        }
-        catch (ArrayIndexOutOfBoundsException e) {
-            window.setEnabledNextButton(false);
-        }
-    }
-
-    private boolean existeProximaMusica(int songIndex){
-        try{
-            return queue.getTable()[songIndex + 1][0] != null;
-        }
-        catch (ArrayIndexOutOfBoundsException e){
-            return false;
-        }
+    private void enablePreviousNext(){
+        window.setEnabledNextButton(queue.existeProximaMusica());
+        window.setEnabledPreviousButton(queue.existeMusicaAnterior());
     }
     private void alternarMusica(String songID){
         Thread t1 = new Thread(() -> {
@@ -377,12 +356,10 @@ public class Player {
         });
         if (alterna == 0 && free1){
             t1.start();
-            System.out.println("t1 iniciada");
         } else if (alterna == 1 && free2){
             t2.start();
-            System.out.println("t2 iniciada");
         }
-        if (button == window.BUTTON_ICON_PLAY && isButtonAbled){
+        if (button == window.BUTTON_ICON_PLAY && isButtonAble){
             semaphore3.release();
         }
     }
