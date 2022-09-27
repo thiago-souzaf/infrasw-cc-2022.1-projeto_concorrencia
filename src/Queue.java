@@ -14,11 +14,11 @@ public class Queue {
     //</editor-fold>
 
     public Queue() {
+        this.songs = new Song[1];
         this.queueLength = 0;
         this.queueCap = 1;
-        this.table = new String[1][6];
-        this.songs = new Song[1];
         this.duracaoMusicas = new float[1][2];
+        this.table = new String[1][6];
     }
     public void addSongToQueue(Song song){
         if(queueLength < queueCap){
@@ -61,7 +61,22 @@ public class Queue {
         this.table[queueLength] = new String[6];
         this.duracaoMusicas[queueLength] = new float[2];
     }
-
+    public boolean existeProximaMusica(){
+        try{
+            return this.getTable()[this.getSongPlayingIndex()+ 1][0] != null;
+        }
+        catch (ArrayIndexOutOfBoundsException e){
+            return false;
+        }
+    }
+    public boolean existeMusicaAnterior(){
+        try{
+            return this.getTable()[this.getSongPlayingIndex() - 1][0] != null;
+        }
+        catch (ArrayIndexOutOfBoundsException e){
+            return false;
+        }
+    }
     public String getSongID(int index){
         return table[index][5];
     }
