@@ -33,10 +33,15 @@ public class Player {
     private int currentFrame = 0;
     /** Semáforo binário usado para adicionar e remover músicas */
     Semaphore semaphore1;
+
     /** Semáforo binário usado para controlar o bitstream e device */
     Semaphore semaphore2;
+
     /** Semáforo binário usado para dar play e pause nas músicas*/
     Semaphore semaphore3;
+
+    /** Semáforo binário usado para controlar o scrubber*/
+    Semaphore semaphore4;
     boolean free1; boolean free2;
     int alterna;
     int button;
@@ -112,14 +117,31 @@ public class Player {
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
         public void mouseReleased(MouseEvent e) {
+            int timeMs = window.getScrubberValue();
+            int msPerFrame = queue.getMsPerFrame(queue.getSongPlayingIndex());
+            int newFrame = timeMs/msPerFrame;
+            try {
+                skipToFrame(newFrame);
+            } catch (BitstreamException ex) {
+                throw new RuntimeException(ex);
+            }
+            System.out.println(timeMs);
+            semaphore4.release();
+
         }
 
         @Override
         public void mousePressed(MouseEvent e) {
+            try {
+                semaphore4.acquire();
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
         }
 
         @Override
         public void mouseDragged(MouseEvent e) {
+
         }
     };
 
@@ -141,6 +163,7 @@ public class Player {
         semaphore1 = new Semaphore(1);
         semaphore2 = new Semaphore(1);
         semaphore3 = new Semaphore(1);
+        semaphore4 = new Semaphore(1);
         queue = new Queue();
         alterna = 0;
         free1 = true;
@@ -191,6 +214,9 @@ public class Player {
             int framesToSkip = newFrame - currentFrame;
             boolean condition = true;
             while (framesToSkip-- > 0 && condition) condition = skipNextFrame();
+        } else{
+            alternarMusica(queue.getSongID(queue.getSongPlayingIndex()));
+            skipToFrame(newFrame);
         }
     }
 
@@ -222,9 +248,11 @@ public class Player {
                 msPerFrame = queue.getMsPerFrame(i);
                 break;
             }
+            // frame = time / msPerFrame
         }
         window.setEnabledStopButton(true);
         enablePause();
+        window.setEnabledScrubber(true);
         boolean b = this.playNextFrame();
         while (b){
             semaphore2.acquire();
@@ -234,7 +262,9 @@ public class Player {
                 semaphore2.release();
                 semaphore3.release();
                 currentFrame++;
+                semaphore4.acquire();
                 window.setTime(currentFrame*msPerFrame, duracaoMus);
+                semaphore4.release();
             } else{
                 semaphore2.release();
                 semaphore3.release();
