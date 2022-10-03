@@ -17,6 +17,7 @@ import java.util.concurrent.Semaphore;
 
 public class Player {
     Queue queue;
+
     /**
      * The MPEG audio bitstream.
      */
@@ -32,32 +33,44 @@ public class Player {
     private PlayerWindow window;
     private int currentFrame = 0;
     /** Semáforo binário usado para adicionar e remover músicas */
-    Semaphore semaphore1;
+    Semaphore semaphoreAddRemoveSong;
+
     /** Semáforo binário usado para controlar o bitstream e device */
-    Semaphore semaphore2;
+    Semaphore semaphoreBitstream;
+
     /** Semáforo binário usado para dar play e pause nas músicas*/
-    Semaphore semaphore3;
+    Semaphore semaphorePlayPause;
+
+    /** Semáforo binário usado para controlar o scrubber*/
+    Semaphore semaphoreScrubber;
+
+    Semaphore thread1;
+    Semaphore thread2;
+
     boolean free1; boolean free2;
     int alterna;
     int button;
     int stop = 0;
     boolean isButtonAble;
     private final ActionListener buttonListenerPlayNow = e -> {
-        String songID = window.getSelectedSong();
-        alternarMusica(songID);
+        String songID = window.getSelectedSong(); // Pega o songID da música selecionada no player
+        alternarMusica(songID); // Chama o método que gerencia a troca de música
     };
     private final ActionListener buttonListenerRemove = e -> new Thread(() -> {
         try {
-            semaphore1.acquire();
+            semaphoreAddRemoveSong.acquire();
             String songID = window.getSelectedSong();
-            for (int i =0; i < queue.getQueueLength(); i++){
+            if (songID.equals(queue.getSongID(queue.getSongPlayingIndex()))){ // Se a música a ser removida está sendo reproduiza no momento:
+                stop = 1;
+            }
+            for (int i = 0; i < queue.getQueueLength(); i++){
                 if (queue.getTable()[i][5].equals(songID)) {
                     queue.removeSongFromQueue(i);
                     enablePreviousNext();
                     break;
                 }
             }
-            semaphore1.release();
+            semaphoreAddRemoveSong.release();
         } catch (InterruptedException ex) {
             throw new RuntimeException(ex);
         }
@@ -65,46 +78,44 @@ public class Player {
     }).start();
     private final ActionListener buttonListenerAddSong = e -> new Thread (() -> {
         try {
-            semaphore1.acquire();
+            semaphoreAddRemoveSong.acquire();
             Song currentSong = window.openFileChooser();
-            if (currentSong != null){
+            if (currentSong != null){ // Só adiciona na queue se alguma música foi selecionada
                 queue.addSongToQueue(currentSong);
             }
-            semaphore1.release();
+            semaphoreAddRemoveSong.release();
         } catch (InvalidDataException | IOException | BitstreamException | UnsupportedTagException |
                  InterruptedException ex) {
             throw new RuntimeException(ex);
         }
-        enablePreviousNext();
+        enablePreviousNext(); // Após inserir a música na queue, verifica se tem músicas antes e depois da música sendo tocada
         window.setQueueList(queue.getTable());
     }).start();
     private final ActionListener buttonListenerPlayPause = e -> {
-        if (button == window.BUTTON_ICON_PLAY){
-            System.out.println("Resumir a música");
-            semaphore3.release();
-            enablePause();
-        } else if (button == window.BUTTON_ICON_PAUSE) {
-            System.out.println("Pausar música");
+        if (button == window.BUTTON_ICON_PAUSE){
             try {
-                semaphore3.acquire();
+                semaphorePlayPause.acquire(); // Quando aperta o botão pause → Pega o semáforo necessário para a música continuar tocando
             } catch (InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
-            enablePlay();
+            enablePlay(); //
+        } else if (button == window.BUTTON_ICON_PLAY) {
+            semaphorePlayPause.release(); // Quando aperta o botão play → Libera o semáforo necessário para a música continuar tocando
+            enablePause();
         }
     };
     private final ActionListener buttonListenerStop = e -> {
         stop = 1;
-        if (button == window.BUTTON_ICON_PLAY && isButtonAble){
-            semaphore3.release();
+        if (button == window.BUTTON_ICON_PLAY && isButtonAble){ // Se tiver em pause, e apertar no ‘stop’ → Libera o semáforo.
+            semaphorePlayPause.release();
         }
     };
     private final ActionListener buttonListenerNext = e -> {
-        String songID = queue.getSongID(queue.getSongPlayingIndex()+1);
+        String songID = queue.getSongID(queue.getSongPlayingIndex()+1); // Pega o songID da próxima música na lista.
         alternarMusica(songID);
     };
     private final ActionListener buttonListenerPrevious = e -> {
-        String songID = queue.getSongID(queue.getSongPlayingIndex()-1);
+        String songID = queue.getSongID(queue.getSongPlayingIndex()-1); // Pega o songID da música anterior na lista.
         alternarMusica(songID);
     };
     private final ActionListener buttonListenerShuffle = e -> {};
@@ -112,14 +123,35 @@ public class Player {
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
         public void mouseReleased(MouseEvent e) {
+            new Thread(() -> {
+                int timeMs = window.getScrubberValue(); // Tempo em milisegundos retornado pelo scrubber ao soltar o mouse.
+                int msPerFrame = queue.getMsPerFrame(queue.getSongPlayingIndex()); // Quantos milisegundos tem em um frame da música que está em reprodução.
+                int newFrame = timeMs/msPerFrame; // Novo frame para qual a música deve pular.
+                try {
+                    skipToFrame(newFrame);
+                } catch (BitstreamException ex) {
+                    throw new RuntimeException(ex);
+                }
+                semaphoreScrubber.release();
+            }).start();
         }
 
         @Override
         public void mousePressed(MouseEvent e) {
+            try {
+                semaphoreScrubber.acquire(); // Semáforo para pausar a reprodução da música enquanto o scrubber estiver sendo arrastado.
+            } catch (InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
         }
 
         @Override
         public void mouseDragged(MouseEvent e) {
+            int timeMs = window.getScrubberValue(); // Tempo em milisegundos retornado pelo scrubber ao arrastar o mouse.
+            int msPerFrame = queue.getMsPerFrame(queue.getSongPlayingIndex()); // Quantos milisegundos tem em um frame da música que está em reprodução.
+            int newFrame = timeMs/msPerFrame; // Novo frame para qual a música deve pular.
+            window.setTime(newFrame*queue.getMsPerFrame(queue.getSongPlayingIndex()), queue.getDuracaoMusica(queue.getSongPlayingIndex()));
+            // O mouseDragged só vai mostrar o tempo em segundos no miniplayer, não vai alterar a execução da música.
         }
     };
 
@@ -138,9 +170,12 @@ public class Player {
                 buttonListenerLoop,
                 scrubberMouseInputAdapter)
         );
-        semaphore1 = new Semaphore(1);
-        semaphore2 = new Semaphore(1);
-        semaphore3 = new Semaphore(1);
+        semaphoreAddRemoveSong = new Semaphore(1);
+        semaphoreBitstream = new Semaphore(1);
+        semaphorePlayPause = new Semaphore(1);
+        semaphoreScrubber = new Semaphore(1);
+        thread1 = new Semaphore(1);
+        thread2 = new Semaphore(1);
         queue = new Queue();
         alterna = 0;
         free1 = true;
@@ -191,33 +226,42 @@ public class Player {
             int framesToSkip = newFrame - currentFrame;
             boolean condition = true;
             while (framesToSkip-- > 0 && condition) condition = skipNextFrame();
+
+        } else{ // Se o scrubber for usado para voltar a música, reinicia a música sendo tocada e passa o novo frame como parâmetro.
+            alternarMusica(queue.getSongID(queue.getSongPlayingIndex()), newFrame);
         }
+        window.setTime(newFrame*queue.getMsPerFrame(queue.getSongPlayingIndex()), queue.getDuracaoMusica(queue.getSongPlayingIndex()));
     }
 
+    /**
+     * Dá play na música indicada pelo songID e a música começa do início.
+     *
+     * @param alt indica qual thread chamou o método (pode ser 0 ou 1)
+     * @param songID String contendo o ID da música
+     */
     private void tocarMusica(int alt, String songID) throws InterruptedException, JavaLayerException, FileNotFoundException{
         int duracaoMus = 0;
         int msPerFrame= 0;
-        for (int i = 0; i < queue.getQueueLength(); i++) {
+        for (int i = 0; i < queue.getQueueLength(); i++) { // Loop para achar a música na tabela
             if (queue.getTable()[i][5].equals(songID)) {
                 queue.setSongPlayingIndex(i);
-                enablePreviousNext();
-                String[] info = queue.getTable()[i];
-                semaphore2.acquire();
+                enablePreviousNext(); // Verifica se tem música antes e/ou depois para ativar os botões de 'previous' e 'next'.
+                String[] info = queue.getTable()[i]; //
                 currentFrame = 0;
                 alterna = alt;
-                try {
+                semaphoreBitstream.acquire();
+                try { // Se já tiver um device e bitstream aberto, aqui serão fechados.
                     if (this.device.isOpen()) {
                         this.device.close();
                         this.bitstream.close();
                     }
-                } catch (NullPointerException exc) {
-                    System.out.println("nenhum device existente");
+                } catch (NullPointerException ignored) {
                 }
                 this.device = FactoryRegistry.systemRegistry().createAudioDevice();
                 this.device.open(this.decoder = new Decoder());
                 this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
-                semaphore2.release();
-                window.setPlayingSongInfo(info[0], info[1], info[2]);
+                semaphoreBitstream.release();
+                window.setPlayingSongInfo(info[0], info[1], info[2]); // Coloca o título, album e artista da música que estiver tocando no player.
                 duracaoMus = queue.getDuracaoMusica(i);
                 msPerFrame = queue.getMsPerFrame(i);
                 break;
@@ -225,19 +269,22 @@ public class Player {
         }
         window.setEnabledStopButton(true);
         enablePause();
+        window.setEnabledScrubber(true);
         boolean b = this.playNextFrame();
         while (b){
-            semaphore2.acquire();
-            semaphore3.acquire();
+            semaphorePlayPause.acquire();
+            semaphoreBitstream.acquire();
             if(alterna == alt) {
-                b = this.playNextFrame();
-                semaphore2.release();
-                semaphore3.release();
+                b = this.playNextFrame(); // Chama esse método em loop para reproduzir a música
+                semaphorePlayPause.release();
+                semaphoreBitstream.release();
                 currentFrame++;
+                semaphoreScrubber.acquire();
                 window.setTime(currentFrame*msPerFrame, duracaoMus);
+                semaphoreScrubber.release();
             } else{
-                semaphore2.release();
-                semaphore3.release();
+                semaphoreBitstream.release();
+                semaphorePlayPause.release();
                 break;
             }
 
@@ -253,54 +300,74 @@ public class Player {
             if (queue.existeProximaMusica()){
                 alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
             }else{
-                window.resetMiniPlayer(); // Não tem próxima música -> reseta o miniplayer
+                window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
             }
         }
     }
-    private void tocarMusicaSelecionada(int alt) throws InterruptedException, JavaLayerException, FileNotFoundException{
+
+    /**
+     * Dá play na música indicada pelo songID e a música começa a partir do newFrame.
+     * Usado apenas quando o scrubber volta na música
+     *
+     * @param alt indica qual thread chamou o método (pode ser 0 ou 1)
+     * @param songID String contendo o ID da música
+     * @param newFrame Frame para qual irá pular.
+     */
+    private void tocarMusica(int alt, String songID, int newFrame) throws InterruptedException, JavaLayerException, FileNotFoundException{
         int duracaoMus = 0;
         int msPerFrame= 0;
-        String songID = window.getSelectedSong();
+        boolean isPaused = true;
         for (int i = 0; i < queue.getQueueLength(); i++) {
             if (queue.getTable()[i][5].equals(songID)) {
+                queue.setSongPlayingIndex(i);
                 enablePreviousNext();
                 String[] info = queue.getTable()[i];
-                semaphore2.acquire();
                 currentFrame = 0;
                 alterna = alt;
+                isPaused = semaphorePlayPause.availablePermits() == 0;
+                if(isPaused){ // Se a música estiver pausada quando o método tocarMusica() for chamado, ele libera os semáforos seguintes para conseguir encerrar a thread anterior.
+                    semaphoreBitstream.release();
+                    semaphorePlayPause.release();
+                }
+                semaphoreBitstream.acquire();
                 try {
                     if (this.device.isOpen()) {
                         this.device.close();
                         this.bitstream.close();
                     }
-                } catch (NullPointerException exc) {
-                    System.out.println("nenhum device existente");
+                } catch (NullPointerException ignored) {
                 }
                 this.device = FactoryRegistry.systemRegistry().createAudioDevice();
                 this.device.open(this.decoder = new Decoder());
                 this.bitstream = new Bitstream(queue.getSong(i).getBufferedInputStream());
-                semaphore2.release();
+                semaphoreBitstream.release();
                 window.setPlayingSongInfo(info[0], info[1], info[2]);
                 duracaoMus = queue.getDuracaoMusica(i);
                 msPerFrame = queue.getMsPerFrame(i);
                 break;
             }
         }
+        if(isPaused){ // Se a música estiver pausada quando chamar o método tocarMusica(), então a música volta a ser pausada após criar o device e bitstream.
+            semaphorePlayPause.acquire();
+        }
         window.setEnabledStopButton(true);
-        enablePause();
+        window.setEnabledScrubber(true);
+        skipToFrame(newFrame);
         boolean b = this.playNextFrame();
         while (b){
-            semaphore2.acquire();
-            semaphore3.acquire();
+            semaphorePlayPause.acquire();
+            semaphoreBitstream.acquire();
             if(alterna == alt) {
                 b = this.playNextFrame();
-                semaphore2.release();
-                semaphore3.release();
+                semaphoreBitstream.release();
+                semaphorePlayPause.release();
                 currentFrame++;
+                semaphoreScrubber.acquire();
                 window.setTime(currentFrame*msPerFrame, duracaoMus);
+                semaphoreScrubber.release();
             } else{
-                semaphore2.release();
-                semaphore3.release();
+                semaphoreBitstream.release();
+                semaphorePlayPause.release();
                 break;
             }
 
@@ -312,8 +379,12 @@ public class Player {
                 break;
             }
         }
-        if (alterna == alt){
-            window.resetMiniPlayer();
+        if (alterna == alt && isButtonAble){ // Quando a música sendo reproduzida acaba, entra nesse if
+            if (queue.existeProximaMusica()){
+                alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
+            }else{
+                window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
+            }
         }
     }
 
@@ -335,6 +406,12 @@ public class Player {
         window.setEnabledNextButton(queue.existeProximaMusica());
         window.setEnabledPreviousButton(queue.existeMusicaAnterior());
     }
+
+    /**
+     * Alterna entre duas threads para tocar a música correspondente ao songID passado como parâmetro.
+     *
+     * @param songID String contendo o ID da música
+     */
     private void alternarMusica(String songID){
         Thread t1 = new Thread(() -> {
             try {
@@ -360,7 +437,41 @@ public class Player {
             t2.start();
         }
         if (button == window.BUTTON_ICON_PLAY && isButtonAble){
-            semaphore3.release();
+            semaphorePlayPause.release();
+        }
+    }
+
+    /**
+     * Alterna entre duas threads para tocar a música correspondente ao songID passado como parâmetro. Usado quando o scrubber pula para um frame menor que o currentFrame.
+     *
+     * @param songID String contendo o ID da música.
+     * @param newFrame Frame para qual irá pular.
+     */
+    private void alternarMusica(String songID, int newFrame){
+        Thread t1 = new Thread(() -> {
+            try {
+                tocarMusica(1, songID, newFrame);
+                thread1.release();
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        Thread t2 = new Thread(() -> {
+            try {
+                tocarMusica(0, songID, newFrame);
+                thread2.release();
+            } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
+                throw new RuntimeException(ex);
+            }
+        });
+        if (alterna == 0){
+            if (thread1.tryAcquire()){
+                t1.start();
+            }
+        } else if (alterna == 1){
+            if (thread2.tryAcquire()){
+                t2.start();
+            }
         }
     }
 
