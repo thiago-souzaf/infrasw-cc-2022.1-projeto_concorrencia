@@ -60,6 +60,9 @@ public class Player {
         try {
             semaphoreAddRemoveSong.acquire();
             String songID = window.getSelectedSong();
+            if (songID.equals(queue.getSongID(queue.getSongPlayingIndex()))){ // Se a música a ser removida está sendo reproduiza no momento:
+                stop = 1;
+            }
             for (int i = 0; i < queue.getQueueLength(); i++){
                 if (queue.getTable()[i][5].equals(songID)) {
                     queue.removeSongFromQueue(i);
@@ -144,7 +147,11 @@ public class Player {
 
         @Override
         public void mouseDragged(MouseEvent e) {
-
+            int timeMs = window.getScrubberValue(); // Tempo em milisegundos retornado pelo scrubber ao arrastar o mouse.
+            int msPerFrame = queue.getMsPerFrame(queue.getSongPlayingIndex()); // Quantos milisegundos tem em um frame da música que está em reprodução.
+            int newFrame = timeMs/msPerFrame; // Novo frame para qual a música deve pular.
+            window.setTime(newFrame*queue.getMsPerFrame(queue.getSongPlayingIndex()), queue.getDuracaoMusica(queue.getSongPlayingIndex()));
+            // O mouseDragged só vai mostrar o tempo em segundos no miniplayer, não vai alterar a execução da música.
         }
     };
 
@@ -229,7 +236,7 @@ public class Player {
     /**
      * Dá play na música indicada pelo songID e a música começa do início.
      *
-     * @param alt indica qual thread tocará a música (pode ser 0 ou 1)
+     * @param alt indica qual thread chamou o método (pode ser 0 ou 1)
      * @param songID String contendo o ID da música
      */
     private void tocarMusica(int alt, String songID) throws InterruptedException, JavaLayerException, FileNotFoundException{
@@ -300,13 +307,11 @@ public class Player {
 
     /**
      * Dá play na música indicada pelo songID e a música começa a partir do newFrame.
+     * Usado apenas quando o scrubber volta na música
      *
-     * @param alt indica qual thread tocará a música (pode ser 0 ou 1)
+     * @param alt indica qual thread chamou o método (pode ser 0 ou 1)
      * @param songID String contendo o ID da música
      * @param newFrame Frame para qual irá pular.
-     * @throws InterruptedException
-     * @throws JavaLayerException
-     * @throws FileNotFoundException
      */
     private void tocarMusica(int alt, String songID, int newFrame) throws InterruptedException, JavaLayerException, FileNotFoundException{
         int duracaoMus = 0;
@@ -445,9 +450,8 @@ public class Player {
     private void alternarMusica(String songID, int newFrame){
         Thread t1 = new Thread(() -> {
             try {
-                free1 = false;
                 tocarMusica(1, songID, newFrame);
-                free1 = true;
+                thread1.release();
             } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
