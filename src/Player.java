@@ -47,7 +47,6 @@ public class Player {
     Semaphore thread1;
     Semaphore thread2;
 
-    boolean free1; boolean free2;
     int alterna;
     int button;
     int stop = 0;
@@ -178,8 +177,6 @@ public class Player {
         thread2 = new Semaphore(1);
         queue = new Queue();
         alterna = 0;
-        free1 = true;
-        free2 = true;
         button = 0;
         isButtonAble = false;
     }
@@ -415,26 +412,28 @@ public class Player {
     private void alternarMusica(String songID){
         Thread t1 = new Thread(() -> {
             try {
-                free1 = false;
                 tocarMusica(1, songID);
-                free1 = true;
+                thread1.release();
             } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
         });
         Thread t2 = new Thread(() -> {
             try {
-                free2 = false;
                 tocarMusica(0, songID);
-                free2 = true;
+                thread2.release();
             } catch (JavaLayerException | FileNotFoundException | InterruptedException ex) {
                 throw new RuntimeException(ex);
             }
         });
-        if (alterna == 0 && free1){
-            t1.start();
-        } else if (alterna == 1 && free2){
-            t2.start();
+        if (alterna == 0){
+            if (thread1.tryAcquire()){
+                t1.start();
+            }
+        } else if (alterna == 1){
+            if (thread2.tryAcquire()){
+                t2.start();
+            }
         }
         if (button == window.BUTTON_ICON_PLAY && isButtonAble){
             semaphorePlayPause.release();
