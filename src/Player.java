@@ -307,7 +307,7 @@ public class Player {
             if (queue.existeProximaMusica()){
                 alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
             }else{
-                if (loop == 1){
+                if (loop == 1){ // Começa a reprodução em loop do início da lista
                     alternarMusica(queue.getTable()[0][5]);
                 } else {
                     window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
@@ -394,7 +394,7 @@ public class Player {
             if (queue.existeProximaMusica()){
                 alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
             }else{
-                if (loop == 1){
+                if (loop == 1){ // Começa a reprodução em loop do início da lista
                     alternarMusica(queue.getTable()[0][5]);
                 } else {
                     window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
