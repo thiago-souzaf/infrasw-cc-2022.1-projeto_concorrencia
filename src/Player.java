@@ -50,6 +50,7 @@ public class Player {
     int alterna;
     int button;
     int stop = 0;
+    int loop = 0;
     boolean isButtonAble;
     private final ActionListener buttonListenerPlayNow = e -> {
         String songID = window.getSelectedSong(); // Pega o songID da música selecionada no player
@@ -70,6 +71,7 @@ public class Player {
         } catch (InterruptedException ex) {
             throw new RuntimeException(ex);
         }
+        enableLoop();
         window.setQueueList(queue.getTable());
     }).start();
     private final ActionListener buttonListenerAddSong = e -> new Thread (() -> {
@@ -85,6 +87,7 @@ public class Player {
             throw new RuntimeException(ex);
         }
         enablePreviousNext(); // Após inserir a música na queue, verifica se tem músicas antes e depois da música sendo tocada
+        enableLoop();
         ativarShuffle();
         window.setQueueList(queue.getTable());
     }).start();
@@ -115,6 +118,14 @@ public class Player {
         String songID = queue.getSongID(queue.getSongPlayingIndex()-1); // Pega o songID da música anterior na lista.
         alternarMusica(songID);
     };
+    private final ActionListener buttonListenerLoop = e -> {
+        if (loop == 0){
+            loop = 1;
+        }
+        else{
+            loop = 0;
+        }
+    };
     private final ActionListener buttonListenerShuffle = e -> {
         if (isButtonAble) { // Se tiver uma música tocando, chama o método com index = 1
             window.setQueueList(queue.shuflle(1));
@@ -122,7 +133,6 @@ public class Player {
         }
         else window.setQueueList(queue.shuflle(0)); // Se não tiver, chama com index = 0
     };
-    private final ActionListener buttonListenerLoop = e -> {};
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
         public void mouseReleased(MouseEvent e) {
@@ -301,7 +311,11 @@ public class Player {
             if (queue.existeProximaMusica()){
                 alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
             }else{
-                window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
+                if (loop == 1){ // Começa a reprodução em loop do início da lista
+                    alternarMusica(queue.getTable()[0][5]);
+                } else {
+                    window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
+                }
             }
         }
     }
@@ -384,7 +398,11 @@ public class Player {
             if (queue.existeProximaMusica()){
                 alternarMusica(queue.getSongID(queue.getSongPlayingIndex()+1)); // Toca a próxima música da lista
             }else{
-                window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
+                if (loop == 1){ // Começa a reprodução em loop do início da lista
+                    alternarMusica(queue.getTable()[0][5]);
+                } else {
+                    window.resetMiniPlayer(); // Não tem próxima música → reseta o miniplayer
+                }
             }
         }
     }
@@ -406,6 +424,14 @@ public class Player {
     private void enablePreviousNext(){
         window.setEnabledNextButton(queue.existeProximaMusica());
         window.setEnabledPreviousButton(queue.existeMusicaAnterior());
+    }
+    private void enableLoop(){
+        if (queue.getQueueLength() > 0){
+            window.setEnabledLoopButton(true);
+        }
+        else{
+            window.setEnabledLoopButton(false);
+        }
     }
 
     /**
