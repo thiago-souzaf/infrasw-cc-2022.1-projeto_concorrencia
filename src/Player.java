@@ -62,13 +62,10 @@ public class Player {
             if (songID.equals(queue.getSongID(queue.getSongPlayingIndex()))){ // Se a música a ser removida está sendo reproduiza no momento:
                 stop = 1;
             }
-            for (int i = 0; i < queue.getQueueLength(); i++){
-                if (queue.getTable()[i][5].equals(songID)) {
-                    queue.removeSongFromQueue(i);
-                    enablePreviousNext();
-                    break;
-                }
-            }
+
+            queue.removeSongFromQueue(songID);
+            enablePreviousNext();
+            ativarShuffle();
             semaphoreAddRemoveSong.release();
         } catch (InterruptedException ex) {
             throw new RuntimeException(ex);
@@ -88,6 +85,7 @@ public class Player {
             throw new RuntimeException(ex);
         }
         enablePreviousNext(); // Após inserir a música na queue, verifica se tem músicas antes e depois da música sendo tocada
+        ativarShuffle();
         window.setQueueList(queue.getTable());
     }).start();
     private final ActionListener buttonListenerPlayPause = e -> {
@@ -105,7 +103,7 @@ public class Player {
     };
     private final ActionListener buttonListenerStop = e -> {
         stop = 1;
-        if (button == window.BUTTON_ICON_PLAY && isButtonAble){ // Se tiver em pause, e apertar no ‘stop’ → Libera o semáforo.
+        if (button == window.BUTTON_ICON_PLAY && isButtonAble){ // Se estiver em pause, e apertar no ‘stop’ → Libera o semáforo.
             semaphorePlayPause.release();
         }
     };
@@ -117,7 +115,13 @@ public class Player {
         String songID = queue.getSongID(queue.getSongPlayingIndex()-1); // Pega o songID da música anterior na lista.
         alternarMusica(songID);
     };
-    private final ActionListener buttonListenerShuffle = e -> {};
+    private final ActionListener buttonListenerShuffle = e -> {
+        if (isButtonAble) { // Se tiver uma música tocando, chama o método com index = 1
+            window.setQueueList(queue.shuflle(1));
+            enablePreviousNext();
+        }
+        else window.setQueueList(queue.shuflle(0)); // Se não tiver, chama com index = 0
+    };
     private final ActionListener buttonListenerLoop = e -> {};
     private final MouseInputAdapter scrubberMouseInputAdapter = new MouseInputAdapter() {
         @Override
@@ -474,5 +478,15 @@ public class Player {
         }
     }
 
+    /**
+    * Habilita o botão "shuffle" se tiver mais de 2 músicas na lista de reprodução, caso contrário desabilita.
+    */
+    private void ativarShuffle(){
+        if(queue.getQueueLength() >= 2){
+            window.setEnabledShuffleButton(true);
+        }else{
+            window.setEnabledShuffleButton(false);
+        }
+    }
     //</editor-fold>
 }
